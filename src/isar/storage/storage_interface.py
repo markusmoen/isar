@@ -1,6 +1,5 @@
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -18,17 +17,11 @@ class LocalStoragePath(BaseModel):
     file_path: Path
 
 
-TPath = TypeVar("TPath", BlobStoragePath, LocalStoragePath)
-
-
-class StoragePaths(BaseModel, Generic[TPath]):  # noqa: UP046
-    data_path: TPath
-    metadata_path: TPath
-
-
 class StorageInterface(metaclass=ABCMeta):
     @abstractmethod
-    def store(self, inspection: InspectionBlob, mission: Mission) -> StoragePaths:
+    def store(
+        self, inspection: InspectionBlob, mission: Mission
+    ) -> BlobStoragePath | LocalStoragePath:
         """
         Parameters
         ----------
@@ -39,8 +32,8 @@ class StorageInterface(metaclass=ABCMeta):
 
         Returns
         ----------
-        StoragePaths
-            Paths to the data and metadata
+        BlobStoragePath or LocalStoragePath
+            Path to the inspection data
 
         Raises
         ----------

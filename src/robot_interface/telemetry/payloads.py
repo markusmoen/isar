@@ -97,13 +97,25 @@ class TaskPayload(BaseModel):
     timestamp: datetime
 
 
+class AcousticMetadataPayload(BaseModel):
+    snr_value: float
+    leak_rate: float
+    leak_rate_unit: str
+    sound_pressure_level_at_sensor_db: float
+    sound_pressure_level_at_source_db: float
+    distance_to_source: float
+    result: str
+    frequency_from: float
+    frequency_to: float
+
+
 class InspectionResultPayload(BaseModel):
     isar_id: str
     robot_name: str
     inspection_id: str
     mission_id: str
+    mission_name: str
     blob_storage_data_path: BlobStoragePath
-    blob_storage_metadata_path: BlobStoragePath
     installation_code: str
     tag_id: str | None = None
     inspection_type: str | None = None
@@ -112,6 +124,9 @@ class InspectionResultPayload(BaseModel):
     timestamp: datetime
     robot_pose: Pose
     target_position: Position | None = None
+    file_type: str
+    duration: float | None = None
+    acoustic_metadata: AcousticMetadataPayload | None = None
 
 
 class InspectionValuePayload(BaseModel):

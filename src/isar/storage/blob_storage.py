@@ -9,9 +9,8 @@ from isar.storage.storage_interface import (
     BlobStoragePath,
     StorageException,
     StorageInterface,
-    StoragePaths,
 )
-from isar.storage.utilities import construct_metadata_file, construct_paths
+from isar.storage.utilities import construct_path
 from robot_interface.models.inspection.inspection import InspectionBlob
 from robot_interface.models.mission.mission import Mission
 
@@ -55,33 +54,18 @@ class BlobStorage(StorageInterface):
             )
         return container_client
 
-    def store(
-        self, inspection: InspectionBlob, mission: Mission
-    ) -> StoragePaths[BlobStoragePath]:
+    def store(self, inspection: InspectionBlob, mission: Mission) -> BlobStoragePath:
         if inspection.data is None:
             raise StorageException("Nothing to store. The inspection data is empty")
 
-        data_filename, metadata_filename = construct_paths(
-            inspection=inspection, mission=mission
-        )
+        data_filename = construct_path(inspection=inspection, mission=mission)
 
-        metadata_bytes: bytes = construct_metadata_file(
-            inspection=inspection, mission=mission, filename=data_filename.name
-        )
-
-        data_path = self._upload_file(
+        return self._upload_file(
             filename=data_filename,
             data=inspection.data,
             container_client=self.container_client_data,
             account_name=settings.BLOB_STORAGE_ACCOUNT_DATA,
         )
-        metadata_path = self._upload_file(
-            filename=metadata_filename,
-            data=metadata_bytes,
-            container_client=self.container_client_data,
-            account_name=settings.BLOB_STORAGE_ACCOUNT_DATA,
-        )
-        return StoragePaths(data_path=data_path, metadata_path=metadata_path)
 
     def _upload_file(
         self,

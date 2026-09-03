@@ -8,26 +8,26 @@ from isar.storage.storage_interface import (
     LocalStoragePath,
     StorageException,
     StorageInterface,
-    StoragePaths,
 )
 from robot_interface.models.inspection.inspection import (
+    AcousticMeasurementMetadata,
     Inspection,
     InspectionBlob,
     InspectionValue,
 )
 from robot_interface.models.mission.mission import Mission
 from robot_interface.telemetry.payloads import (
+    AcousticMetadataPayload,
     InspectionResultPayload,
     InspectionValuePayload,
 )
 
 
-def has_empty_blob_storage_path(storage_paths: StoragePaths) -> bool:
-    for path in (storage_paths.data_path, storage_paths.metadata_path):
-        for value in (path.storage_account, path.blob_container, path.blob_name):
-            if not (value and value.strip()):
-                return True
-    return False
+def has_empty_blob_storage_path(path: BlobStoragePath) -> bool:
+    return any(
+        not (value and value.strip())
+        for value in (path.storage_account, path.blob_container, path.blob_name)
+    )
 
 
 class Uploader:
@@ -56,18 +56,16 @@ class Uploader:
 
         elif isinstance(inspection, InspectionBlob):
             for storage_handler in self.storage_handlers:
-                inspection_paths: StoragePaths | None = _upload(
+                inspection_path: BlobStoragePath | LocalStoragePath | None = _upload(
                     self.logger, storage_handler, inspection, mission
                 )
 
-                if inspection_paths is None:
+                if inspection_path is None:
                     continue
 
-                if isinstance(inspection_paths.data_path, LocalStoragePath):
+                if isinstance(inspection_path, LocalStoragePath):
                     self.logger.info("Skipping publishing when using local storage")
-                elif isinstance(
-                    inspection_paths.data_path, BlobStoragePath
-                ) and has_empty_blob_storage_path(inspection_paths):
+                elif has_empty_blob_storage_path(inspection_path):
                     self.logger.warning(
                         "Skipping publishing: Blob storage paths are empty for inspection %s",
                         str(inspection.id)[:8],
@@ -76,7 +74,7 @@ class Uploader:
                     _publish_inspection_result(
                         self.mqtt_queue,
                         inspection=inspection,
-                        inspection_paths=inspection_paths,
+                        inspection_path=inspection_path,
                         mission=mission,
                     )
 
@@ -89,21 +87,20 @@ class Uploader:
 def _upload(
     logger: logging.Logger,
     storage_handler: StorageInterface,
-    inspection: Inspection,
+    inspection: InspectionBlob,
     mission: Mission,
-) -> StoragePaths | None:
-    inspection_paths: StoragePaths
+) -> BlobStoragePath | LocalStoragePath | None:
     upload_attempts: int = 0
     while upload_attempts < settings.UPLOAD_FAILURE_ATTEMPTS_LIMIT:
         try:
-            inspection_paths = storage_handler.store(
+            inspection_path = storage_handler.store(
                 inspection=inspection, mission=mission
             )
             logger.info(
                 f"Storage handler: {type(storage_handler).__name__} "
                 f"uploaded inspection {str(inspection.id)[:8]}"
             )
-            return inspection_paths
+            return inspection_path
         except StorageException:
             upload_attempts += 1
 
@@ -154,16 +151,30 @@ def _publish_inspection_value(
 def _publish_inspection_result(
     mqtt_queue: MQTTQueue,
     inspection: InspectionBlob,
-    inspection_paths: StoragePaths[BlobStoragePath],
+    inspection_path: BlobStoragePath,
     mission: Mission,
 ) -> None:
+    acoustic_metadata = None
+    if isinstance(inspection.metadata, AcousticMeasurementMetadata):
+        acoustic_metadata = AcousticMetadataPayload(
+            snr_value=inspection.metadata.snr_value,
+            leak_rate=inspection.metadata.leak_rate,
+            leak_rate_unit=inspection.metadata.leak_rate_unit,
+            sound_pressure_level_at_sensor_db=inspection.metadata.sound_pressure_level_at_sensor_db,
+            sound_pressure_level_at_source_db=inspection.metadata.sound_pressure_level_at_source_db,
+            distance_to_source=inspection.metadata.distance_to_source,
+            result=inspection.metadata.result,
+            frequency_from=inspection.metadata.frequency_from,
+            frequency_to=inspection.metadata.frequency_to,
+        )
+
     payload: InspectionResultPayload = InspectionResultPayload(
         isar_id=settings.ISAR_ID,
         robot_name=settings.ROBOT_NAME,
         inspection_id=inspection.id,
         mission_id=mission.id,
-        blob_storage_data_path=inspection_paths.data_path,
-        blob_storage_metadata_path=inspection_paths.metadata_path,
+        mission_name=mission.name,
+        blob_storage_data_path=inspection_path,
         installation_code=settings.PLANT_SHORT_NAME,
         tag_id=inspection.metadata.tag_id,
         inspection_type=type(inspection).__name__,
@@ -172,6 +183,9 @@ def _publish_inspection_result(
         timestamp=inspection.metadata.start_time,
         robot_pose=inspection.metadata.robot_pose,
         target_position=inspection.metadata.target_position,
+        file_type=inspection.metadata.file_type,
+        duration=getattr(inspection.metadata, "duration", None),
+        acoustic_metadata=acoustic_metadata,
     )
     mqtt_queue.publish(
         topic=settings.TOPIC_ISAR_INSPECTION_RESULT,
