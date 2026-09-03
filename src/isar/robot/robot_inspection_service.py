@@ -146,5 +146,5 @@ class RobotInspectionService:
                 if settings.UPLOAD_INSPECTIONS_ASYNC:
                     self._restart_inspection_thread_if_stopped()
         except (EventTimeoutError, EventConflictError) as e:
-            self.logger.error(f"An error occurred with the event queue: {str(e)}")
+            self.logger.error(f"An error occurred with the event queue: {e!s}")
         self.logger.info("Exiting robot service main thread")

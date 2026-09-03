@@ -90,7 +90,7 @@ class StateMachine:
 
                 self.current_state = transition(self.events)
         except Exception as e:  # noqa: BLE001
-            self.logger.error(f"Unhandled exception in state machine: {str(e)}")
+            self.logger.error(f"Unhandled exception in state machine: {e!s}")
 
     def terminate(self) -> None:
         self.logger.info("Stopping state machine")
